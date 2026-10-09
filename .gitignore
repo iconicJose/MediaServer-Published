@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.build/
+__pycache__/
+*.pyc
+settings.json
+*.sqlite3
+*.mp4
+*.mkv
+*.torrent
+.env*

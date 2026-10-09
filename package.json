@@ -1,0 +1,66 @@
+{
+  "name": "mediaserver-published",
+  "productName": "MediaServer Published",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Desktop media library with user-configured folders and connections.",
+  "author": "iconicJose",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check desktop/main.cjs && node --check desktop/preload.cjs && node --check public/app.js && node --check public/settings.js && python -m unittest discover -s tests && node --test tests/settings.test.cjs",
+    "build:backend": "python -m PyInstaller --noconfirm --clean --onefile --name media-backend --distpath .build/backend --workpath .build/pyinstaller --specpath .build backend.py",
+    "build": "npm run build:backend && electron-builder --win nsis zip --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3",
+    "jsdom": "30.1.2"
+  },
+  "build": {
+    "appId": "io.github.iconicjose.mediaserverpublished",
+    "productName": "MediaServer Published",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "desktop/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".build/backend/media-backend.exe",
+        "to": "backend/media-backend.exe"
+      },
+      {
+        "from": "public",
+        "to": "public"
+      },
+      {
+        "from": "licenses",
+        "to": "licenses"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "MediaServer Published",
+      "artifactName": "MediaServer-Published-Setup-${version}.${ext}"
+    },
+    "artifactName": "MediaServer-Published-${version}-Windows-x64.${ext}"
+  }
+}
