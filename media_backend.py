@@ -306,7 +306,8 @@ def delete_media(server, kind, item_id):
         if folder == server.media_root or not folder.is_relative_to(server.media_root):
             continue
         top_folder = server.media_root / folder.relative_to(server.media_root).parts[0]
-        if top_folder.is_symlink() or any(path.is_symlink() for path in top_folder.rglob('*')):
+        if (top_folder.is_symlink() or top_folder.is_junction() or
+                any(path.is_symlink() or path.is_junction() for path in top_folder.rglob('*'))):
             continue
         videos = {path.resolve() for path in top_folder.rglob('*')
                   if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS}
@@ -351,6 +352,20 @@ def delete_media(server, kind, item_id):
         overrides.pop(override_key('series', item_id, series_key), None)
     write_json(server.metadata_path, metadata)
     write_json(server.overrides_path, overrides)
+    if kind == 'movie':
+        for folder in cleanup_folders:
+            # Recheck after deleting the movie: a newly added video or link must
+            # keep the folder, and the selected library itself is never removed.
+            resolved = folder.resolve()
+            if resolved == server.media_root or not resolved.is_relative_to(server.media_root):
+                continue
+            contents = list(folder.rglob('*'))
+            if (folder.is_symlink() or folder.is_junction() or
+                    any(path.is_symlink() or path.is_junction() or
+                        (path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS)
+                        for path in contents)):
+                continue
+            shutil.rmtree(folder)
     return len(targets)
 
 

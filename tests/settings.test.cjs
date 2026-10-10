@@ -42,6 +42,20 @@ test('first launch renders editable settings with no selected media or credentia
     assert.equal(doc.querySelector('h1').textContent,'Settings');
   }finally{dispose();}
 });
+
+test('movie deletion confirmation describes folder removal and cancellation sends no delete',async()=>{
+  const {dom,requests,dispose}=await createApp();
+  try{
+    let warning='';
+    dom.window.confirm=message=>{warning=message;return false;};
+    vm.runInContext("items=[{id:1234567890123,kind:'movie',name:'Movie'}]; manageTarget={kind:'movie',id:1234567890123};",dom.getInternalVMContext());
+    const menu=dom.window.document.getElementById('media-menu');
+    await menu.onclick({target:menu.querySelector('[data-action="delete"]')});
+    assert.match(warning,/folder and remaining files/);
+    assert.match(warning,/no other videos/);
+    assert.equal(requests.filter(request=>request.url==='/api/manage').length,0);
+  }finally{dispose();}
+});
 test('native folder selection and saving sends chosen path',async()=>{
   const {dom,state,dispose}=await createApp();
   try{

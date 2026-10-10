@@ -1,6 +1,7 @@
 import http.client
 import json
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 import threading
@@ -104,6 +105,106 @@ class PublishedAppTests(unittest.TestCase):
         self.assertEqual((status, body), (206, b'2345'))
         self.assertEqual(headers['Content-Range'], 'bytes 2-5/10')
         self.assertEqual(file.read_bytes(), b'0123456789')
+
+    def delete(self, relative, kind='movie'):
+        item = media_backend.media_id(Path(relative))
+        with patch('media_backend.subtitle_tracks', return_value=[]):
+            status, _, body = self.request('/api/manage?ticket='+self.ticket('manage'),
+                body={'action':'delete', 'kind':kind, 'id':item})
+        self.assertEqual(status, 200, body)
+        self.assertEqual(json.loads(body)['deleted'], 1)
+
+    def test_movie_deletion_removes_folder_and_leftovers(self):
+        library = self.root/'videos'
+        self.choose(library)
+        folder = library/'Movie'
+        (folder/'Subs').mkdir(parents=True)
+        (folder/'Movie.mp4').write_bytes(b'movie')
+        (folder/'poster.jpg').write_bytes(b'artwork')
+        (folder/'Subs'/'English.srt').write_text('subtitle')
+        (folder/'movie.rar').write_bytes(b'archive parts')
+        other = library/'Keep'
+        other.mkdir()
+        (other/'Keep.mp4').write_bytes(b'keep movie')
+        self.delete('Movie/Movie.mp4')
+        self.assertFalse(folder.exists())
+        self.assertEqual((other/'Keep.mp4').read_bytes(), b'keep movie')
+        self.assertTrue(library.is_dir())
+
+    def test_movie_at_library_root_preserves_root_and_other_files(self):
+        library = self.root/'videos'
+        self.choose(library)
+        (library/'Movie.mp4').write_bytes(b'movie')
+        (library/'poster.jpg').write_bytes(b'keep artwork')
+        self.delete('Movie.mp4')
+        self.assertFalse((library/'Movie.mp4').exists())
+        self.assertEqual((library/'poster.jpg').read_bytes(), b'keep artwork')
+
+    def test_shared_movie_folder_remains_until_last_video_deleted(self):
+        library = self.root/'videos'
+        self.choose(library)
+        folder = library/'Movies'
+        folder.mkdir()
+        (folder/'First.mp4').write_bytes(b'first')
+        (folder/'Second.mp4').write_bytes(b'second')
+        (folder/'poster.jpg').write_bytes(b'artwork')
+        self.delete('Movies/First.mp4')
+        self.assertEqual((folder/'Second.mp4').read_bytes(), b'second')
+        self.assertTrue((folder/'poster.jpg').exists())
+        self.delete('Movies/Second.mp4')
+        self.assertFalse(folder.exists())
+
+    def test_movie_deletion_cleans_nested_folder(self):
+        library = self.root/'videos'
+        self.choose(library)
+        (library/'Movie'/'Video').mkdir(parents=True)
+        (library/'Movie'/'Video'/'Movie.mp4').write_bytes(b'movie')
+        (library/'Movie'/'poster.jpg').write_bytes(b'artwork')
+        self.delete('Movie/Video/Movie.mp4')
+        self.assertFalse((library/'Movie').exists())
+
+    def test_episode_deletion_keeps_series_folder(self):
+        library = self.root/'videos'
+        self.choose(library)
+        folder = library/'Series'
+        folder.mkdir()
+        (folder/'Series.S01E01.mp4').write_bytes(b'episode')
+        (folder/'poster.jpg').write_bytes(b'artwork')
+        self.delete('Series/Series.S01E01.mp4', 'episode')
+        self.assertTrue(folder.is_dir())
+        self.assertTrue((folder/'poster.jpg').exists())
+
+    def test_new_video_added_during_deletion_keeps_folder(self):
+        library = self.root/'videos'
+        self.choose(library)
+        folder = library/'Movie'
+        folder.mkdir()
+        (folder/'Movie.mp4').write_bytes(b'movie')
+        with patch('media_backend.detach_qbit_files',
+                   side_effect=lambda *args: (folder/'New.mp4').write_bytes(b'new video')):
+            self.delete('Movie/Movie.mp4')
+        self.assertEqual((folder/'New.mp4').read_bytes(), b'new video')
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows junction regression')
+    def test_movie_folder_with_junction_is_preserved(self):
+        library = self.root/'videos'
+        self.choose(library)
+        folder = library/'Movie'
+        folder.mkdir()
+        (folder/'Movie.mp4').write_bytes(b'movie')
+        outside = self.root/'outside'
+        outside.mkdir()
+        (outside/'Keep.mp4').write_bytes(b'keep movie')
+        junction = folder/'Linked'
+        result = subprocess.run([os.environ['COMSPEC'], '/c', 'mklink', '/J',
+                                 str(junction), str(outside)], capture_output=True,
+                                creationflags=subprocess.CREATE_NO_WINDOW)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(junction.is_junction())
+        self.delete('Movie/Movie.mp4')
+        self.assertTrue(folder.is_dir())
+        self.assertTrue(junction.is_junction())
+        self.assertEqual((outside/'Keep.mp4').read_bytes(), b'keep movie')
 
     def test_missing_ffmpeg_keeps_native_file_and_reports_mkv_dependency(self):
         library = self.root/'videos'

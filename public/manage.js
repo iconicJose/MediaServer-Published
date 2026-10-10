@@ -189,7 +189,8 @@ mediaMenu.onclick=async event=>{
         if(deletesInFlight.has(key))return;
         const count=target.kind==='series'?items.filter(row=>row.kind==='tv'&&row.series===item.series).length:1;
         const title=managedTitle(item);
-        if(!confirm(`Delete ${title} from local media server? ${count} video file${count===1?'':'s'} and matching subtitles will be removed. This cannot be undone.`))return;
+        const folderWarning=target.kind==='movie'?' Its folder and remaining files will also be removed if it contains no other videos.':'';
+        if(!confirm(`Delete ${title} from local media server? ${count} video file${count===1?'':'s'} and matching subtitles will be removed.${folderWarning} This cannot be undone.`))return;
         deletesInFlight.add(key);
         const updateNotice=deletionNotice(title);
         try{
